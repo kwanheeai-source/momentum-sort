@@ -24,7 +24,7 @@ def parse_args():
     )
     parser.add_argument("--n", "-n", type=int, default=100_000,
                         help="Number of elements per run (subsampled if needed)")
-    parser.add_argument("--trials", "-t", type=int, default=5,
+    parser.add_argument("--trials", "-t", type=int, default=10,
                         help="Number of trials for averaging")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")

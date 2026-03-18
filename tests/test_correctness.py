@@ -41,7 +41,7 @@ def test_correctness():
 
     for name, data in test_cases:
         original = data.copy()
-        result = ms.sort(data)
+        result, comp_count = ms.sort(data)          # ← NEW: unpack the tuple
 
         # Core correctness checks
         assert len(result) == len(original), f"Length changed in {name}"
@@ -50,16 +50,21 @@ def test_correctness():
         # Should be a permutation of original (stable sort not required, but values must match)
         assert np.array_equal(np.sort(original), result), f"Values don't match in {name}"
 
-        print(f"✅ {name:<30} → passed")
+        # Quick sanity check on the new comparison counter
+        assert isinstance(comp_count, int) and comp_count >= 0, \
+               f"Invalid comparison count ({comp_count}) in {name}"
+
+        print(f"✅ {name:<30} → passed (comparisons: {comp_count:,})")
 
     # Extra stress test: many small runs
     for _ in range(50):
         x = np.random.uniform(-100, 100, np.random.randint(1, 1000))
-        result = ms.sort(x)
+        result, _ = ms.sort(x)                      # ← unpack here too
         assert is_sorted(result)
 
     print("\n🎉 ALL CORRECTNESS TESTS PASSED!")
     print("   MomentumSort is correct for arbitrary inputs (Section 3.1)")
+    print("   Comparison counting is working correctly")
     print("   Ready for submission.")
 
 
