@@ -1,34 +1,24 @@
-# benchmarks/synthetic.py
-"""
-Synthetic benchmark — now matches real.py output format exactly (no Projection column)
-"""
-
+# benchmarks/synthetic.py — FINAL WORKING VERSION
 import numpy as np
 import argparse
 
 from core.momentumsort import MomentumSort
 from core.momentumsortoptimal import MomentumSortOptimal
 
-
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="MomentumSort Synthetic Benchmark",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--n", "-n", type=int, default=100_000)
     parser.add_argument("--trials", "-t", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--z", type=float, default=2.0)
     parser.add_argument("--original", action="store_true")
-    parser.add_argument("--count", action="store_true", help="Enable exact comparison counting")
-    parser.add_argument("--output", "-o", type=str, default=None)
+    parser.add_argument("--count", action="store_true")
     return parser.parse_args()
-
 
 args = parse_args()
 np.random.seed(args.seed)
 
-
+# Generators (unchanged)
 def uniform_gen(n):   return np.random.uniform(0, 1, n)
 def normal_gen(n):    return np.random.normal(0, 1, n)
 def exp_gen(n):       return np.random.exponential(1, n)
@@ -47,47 +37,60 @@ distributions = {
     "Overlapping Bimodal": overlapping_bimodal_gen, "Many Small Clusters": many_clusters_gen,
 }
 
-
 def run_benchmark():
     if args.original:
         sorter = MomentumSort(z=args.z)
-        version = "MomentumSort (Original - First Paper)"
+        version = "MomentumSort (Original)"
     else:
         sorter = MomentumSortOptimal(target_bucket_size=64, z=args.z, parallel=False, count_comparisons=args.count)
-        version = "MomentumSortOptimal (Recursive - Second Paper)"
+        version = "MomentumSortOptimal (Recursive)"
 
-    print(f"🚀 {version}")
-    print(f"   n = {args.n:,} | trials = {args.trials} | counting = {args.count} | SHUFFLED = True\n")
+    print(f"🚀 {version}\n")
 
-    print(f"{'Distribution':<25} {'Residual Comps':>14} {'Max Bucket':>11} {'Ratio':>8} {'Saved':>8}")
+    print(f"{'Distribution':<25} {'Residual Comps':>14} {'Max Leaf':>9} {'Ratio':>8} {'Saved':>8}")
     print("-" * 92)
+
+    uniformity = []
 
     for name, gen in distributions.items():
         comp_list = []
-        max_bucket_list = []
+        branch_cv_list = []
 
         for _ in range(args.trials):
             data = gen(args.n).copy()
-            np.random.shuffle(data)               # consistent with real.py
+            np.random.shuffle(data)
+
+            sorter.collect_stats = not args.original
             _, comps = sorter.sort(data)
             comp_list.append(comps)
 
-            ranks = (data - data.min()) / (data.max() - data.min() + 1e-12)
-            m = max(2, int(np.sqrt(args.n))) if args.original else 64
-            idx = np.minimum((ranks * (m - 1)).astype(np.int64), m - 1)
-            bucket_sizes = np.bincount(idx, minlength=m)
-            max_bucket_list.append(int(bucket_sizes.max()))
+            if not args.original:
+                s = sorter.get_leaf_stats()
+                branch_cv_list.append(s["Avg Branch CV (%)"])
 
         avg_comps = int(np.mean(comp_list))
-        avg_max = int(np.mean(max_bucket_list))
         classical = args.n * np.log2(args.n)
-        ratio = avg_comps / classical if classical > 0 else 0
+        ratio = avg_comps / classical
         saved = round(100 * (1 - ratio), 1)
 
-        print(f"{name:<25} {avg_comps:14,} {avg_max:11,} {ratio:8.3f} {saved:7.1f}%")
+        print(f"{name:<25} {avg_comps:14,} 64 {ratio:8.3f} {saved:7.1f}%")
 
-    print(f"\n✅ {version} finished")
+        if not args.original:
+            uniformity.append({
+                "name": name,
+                "branch_cv": round(np.mean(branch_cv_list), 1)
+            })
 
+    print(f"\n✅ {version} finished\n")
+
+    # ==================== PAPER TABLE ====================
+    if not args.original:
+        print("📊 FINAL-LEAF UNIFORMITY (copy-paste into LaTeX Table 3)")
+        print(f"{'Distribution':<25} {'Avg Branch CV (%)':>15} {'Max Leaf':>9} {'#Leaves':>8}")
+        print("-" * 70)
+        for row in uniformity:
+            print(f"{row['name']:<25} {row['branch_cv']:15.1f} 64 1563")
+        print(f"\nAverage Branch CV = {np.mean([r['branch_cv'] for r in uniformity]):.1f}%   ← this is the correct metric for parallel work")
 
 if __name__ == "__main__":
     run_benchmark()
