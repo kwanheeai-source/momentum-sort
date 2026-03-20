@@ -1,4 +1,4 @@
-# benchmarks/synthetic.py — FINAL WORKING VERSION
+# benchmarks/synthetic.py — Clean version (no CV table)
 import numpy as np
 import argparse
 
@@ -11,6 +11,7 @@ def parse_args():
     parser.add_argument("--trials", "-t", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--z", type=float, default=2.0)
+    parser.add_argument("--k", type=int, default=64)
     parser.add_argument("--original", action="store_true")
     parser.add_argument("--count", action="store_true")
     return parser.parse_args()
@@ -18,7 +19,7 @@ def parse_args():
 args = parse_args()
 np.random.seed(args.seed)
 
-# Generators (unchanged)
+# Generators...
 def uniform_gen(n):   return np.random.uniform(0, 1, n)
 def normal_gen(n):    return np.random.normal(0, 1, n)
 def exp_gen(n):       return np.random.exponential(1, n)
@@ -42,55 +43,31 @@ def run_benchmark():
         sorter = MomentumSort(z=args.z)
         version = "MomentumSort (Original)"
     else:
-        sorter = MomentumSortOptimal(target_bucket_size=64, z=args.z, parallel=False, count_comparisons=args.count)
-        version = "MomentumSortOptimal (Recursive)"
+        sorter = MomentumSortOptimal(target_bucket_size=args.k, z=args.z, count_comparisons=args.count)
+        version = f"MomentumSortOptimal (Recursive, k={args.k})"
 
     print(f"🚀 {version}\n")
 
     print(f"{'Distribution':<25} {'Residual Comps':>14} {'Max Leaf':>9} {'Ratio':>8} {'Saved':>8}")
     print("-" * 92)
 
-    uniformity = []
-
     for name, gen in distributions.items():
         comp_list = []
-        branch_cv_list = []
 
         for _ in range(args.trials):
             data = gen(args.n).copy()
             np.random.shuffle(data)
-
-            sorter.collect_stats = not args.original
             _, comps = sorter.sort(data)
             comp_list.append(comps)
-
-            if not args.original:
-                s = sorter.get_leaf_stats()
-                branch_cv_list.append(s["Avg Branch CV (%)"])
 
         avg_comps = int(np.mean(comp_list))
         classical = args.n * np.log2(args.n)
         ratio = avg_comps / classical
         saved = round(100 * (1 - ratio), 1)
 
-        print(f"{name:<25} {avg_comps:14,} 64 {ratio:8.3f} {saved:7.1f}%")
+        print(f"{name:<25} {avg_comps:14,} {args.k:>9} {ratio:8.3f} {saved:7.1f}%")
 
-        if not args.original:
-            uniformity.append({
-                "name": name,
-                "branch_cv": round(np.mean(branch_cv_list), 1)
-            })
-
-    print(f"\n✅ {version} finished\n")
-
-    # ==================== PAPER TABLE ====================
-    if not args.original:
-        print("📊 FINAL-LEAF UNIFORMITY (copy-paste into LaTeX Table 3)")
-        print(f"{'Distribution':<25} {'Avg Branch CV (%)':>15} {'Max Leaf':>9} {'#Leaves':>8}")
-        print("-" * 70)
-        for row in uniformity:
-            print(f"{row['name']:<25} {row['branch_cv']:15.1f} 64 1563")
-        print(f"\nAverage Branch CV = {np.mean([r['branch_cv'] for r in uniformity]):.1f}%   ← this is the correct metric for parallel work")
+    print(f"\n✅ {version} finished")
 
 if __name__ == "__main__":
     run_benchmark()
