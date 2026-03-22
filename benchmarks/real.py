@@ -1,4 +1,4 @@
-# benchmarks/real.py — Clean version (no CV, respects your data loading)
+# benchmarks/real.py — COMPLETE & FIXED (real Python sorted counting as baseline)
 import numpy as np
 import argparse
 import pandas as pd
@@ -7,6 +7,20 @@ import sys
 
 from core.momentumsort import MomentumSort
 from core.momentumsortoptimal import MomentumSortOptimal
+
+
+# CountedItem (local copy so benchmark works without import issues)
+class CountedItem:
+    def __init__(self, value: float, counter: list):
+        self.value = value
+        self.counter = counter
+
+    def __lt__(self, other): self.counter[0] += 1; return self.value < other.value
+    def __le__(self, other): self.counter[0] += 1; return self.value <= other.value
+    def __gt__(self, other): self.counter[0] += 1; return self.value > other.value
+    def __ge__(self, other): self.counter[0] += 1; return self.value >= other.value
+    def __eq__(self, other): self.counter[0] += 1; return self.value == other.value
+
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -18,6 +32,7 @@ datasets = {
     "NYC Taxi Fares (2.96M)": {"file": DATA_DIR / "nyc_taxi_fares_2964624.npy", "type": "npy", "name": "fare_amount"},
 }
 
+
 def load_data(info):
     fp = info["file"]
     if not fp.exists():
@@ -27,8 +42,9 @@ def load_data(info):
         return np.load(fp, allow_pickle=True).astype(np.float64).flatten()
     elif info["type"] == "csv":
         return pd.read_csv(fp)[info["column"]].values.astype(np.float64)
-    else:  # "data" type (abalone)
+    else:  # abalone
         return pd.read_csv(fp, header=None).iloc[:, info["column"]].values.astype(np.float64)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -36,44 +52,73 @@ def parse_args():
     parser.add_argument("--trials", "-t", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--z", type=float, default=2.0)
-    parser.add_argument("--k", type=int, default=64)
+    parser.add_argument("--k", type=int, default=128)
     parser.add_argument("--original", action="store_true")
     parser.add_argument("--count", action="store_true")
     return parser.parse_args()
 
+
 args = parse_args()
 np.random.seed(args.seed)
+
+
+def count_python_comps(data):
+    """Run Python's real sorted() and count every comparison on this exact data."""
+    data = list(data)
+    counter = [0]
+    wrapped = [CountedItem(float(v), counter) for v in data]
+    sorted(wrapped)
+    return counter[0]
+
 
 def run_benchmark():
     if args.original:
         sorter = MomentumSort(z=args.z)
         version = "MomentumSort (Original)"
     else:
-        sorter = MomentumSortOptimal(target_bucket_size=args.k, z=args.z, count_comparisons=args.count)
-        version = f"MomentumSortOptimal (Recursive, k={args.k})"
+        sorter = MomentumSortOptimal(target_leaf_size=args.k, z=args.z, count_comparisons=args.count)
+        version = f"MomentumSortOptimal (leaf={args.k})"
 
     print(f"🚀 {version} — Real Datasets\n")
-
-    print(f"{'Dataset':<35} {'Residual Comps':>14} {'Max Leaf':>9} {'Ratio':>8} {'Saved':>8}")
-    print("-" * 95)
+    print(f"{'Dataset':<35} {'Python Comps':>14} {'Residual':>12} {'Bucket':>10} {'Total':>12} {'Saved vs Python':>15}")
+    print("-" * 110)
 
     for name, info in datasets.items():
-        comp_list = []
+        python_list = []
+        residual_list = []
+        bucket_list = []
+        total_list = []
 
         for _ in range(args.trials):
-            data = load_data(info)[:args.n].copy()   # take first n elements
+            data = load_data(info)[:args.n].copy()
             np.random.shuffle(data)
-            _, comps = sorter.sort(data)
-            comp_list.append(comps)
 
-        avg_comps = int(np.mean(comp_list))
-        classical = args.n * np.log2(args.n)
-        ratio = avg_comps / classical
-        saved = round(100 * (1 - ratio), 1)
+            python_comps = count_python_comps(data)          # ← real counted Python baseline
+            result = sorter.sort(data)
 
-        print(f"{name:<35} {avg_comps:14,} {args.k:>9} {ratio:8.3f} {saved:7.1f}%")
+            if len(result) == 4:
+                _, residual, bucket_cost, total = result
+            else:
+                _, residual = result
+                bucket_cost = 0
+                total = residual
+
+            python_list.append(python_comps)
+            residual_list.append(residual)
+            bucket_list.append(bucket_cost)
+            total_list.append(total)
+
+        avg_python = int(np.mean(python_list))
+        avg_residual = int(np.mean(residual_list))
+        avg_bucket = int(np.mean(bucket_list))
+        avg_total = int(np.mean(total_list))
+
+        saved = round(100 * (avg_python - avg_total) / avg_python, 1)
+
+        print(f"{name:<35} {avg_python:14,} {avg_residual:12,} {avg_bucket:10,} {avg_total:12,} {saved:14.1f}%")
 
     print(f"\n✅ {version} finished")
+
 
 if __name__ == "__main__":
     run_benchmark()
