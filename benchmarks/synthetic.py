@@ -43,14 +43,26 @@ def pareto_gen(n):    return np.random.pareto(2.0, n) + 1
 def bimodal_gen(n):   return np.concatenate([np.random.normal(-3,1,n//2), np.random.normal(3,1,n//2)])
 def trimodal_gen(n):  return np.concatenate([np.random.normal(-4,0.8,n//3), np.random.normal(0,1.2,n//3), np.random.normal(4,0.9,n//3)])
 def overlapping_bimodal_gen(n): return np.concatenate([np.random.normal(-1,1.5,n//2), np.random.normal(1.5,1.8,n//2)])
+def bifurcated_gen(n):
+    """Extreme bifurcation: mass at 0.0 and 1.0, empty middle."""
+    # 50% at the low end, 50% at the high end with very small variance
+    low_cluster = np.random.normal(0.05, 0.01, n // 2)
+    high_cluster = np.random.normal(0.95, 0.01, n // 2)
+    return np.clip(np.concatenate([low_cluster, high_cluster]), 0, 1)
 def many_clusters_gen(n):
     return np.concatenate([np.random.normal(i*1.8, 0.6+i*0.2, n//6) for i in range(6)])
 
 distributions = {
-    "Uniform": uniform_gen, "Normal": normal_gen, "Exponential": exp_gen,
-    "Gamma (shape=0.5)": gamma_gen, "Pareto (a=2)": pareto_gen,
-    "Bimodal": bimodal_gen, "Trimodal": trimodal_gen,
-    "Overlapping Bimodal": overlapping_bimodal_gen, "Many Small Clusters": many_clusters_gen,
+    "Uniform": uniform_gen,
+    "Normal": normal_gen,
+    "Exponential": exp_gen,
+    "Gamma (shape=0.5)": gamma_gen,
+    "Pareto (a=2)": pareto_gen,
+    "Bimodal": bimodal_gen,
+    "Trimodal": trimodal_gen,
+    "Extreme Bifurcation": bifurcated_gen,
+    "Overlapping Bimodal": overlapping_bimodal_gen,
+    "Many Small Clusters": many_clusters_gen,
 }
 
 
