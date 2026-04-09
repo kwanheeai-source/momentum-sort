@@ -1,10 +1,5 @@
 """
-core/momentumsortoptimal.py — FINAL Clean Implementation (exactly as you described)
-- Parallel moments (1–3 threads)
-- Skew-aware bucket boundary direction
-- Precomputed boundaries
-- Equal-sized chunks → fully parallel assignment
-- Final parallel leaf queue
+core/momentumsortoptimal.py — To be improved for future recursive application
 """
 
 import numpy as np
